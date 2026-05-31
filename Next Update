@@ -1,13 +1,13 @@
 --[[
     Alexchad Ui Library COMPLETE REMAKE. The old one was just a waste of space so  i deleted it.
-    This is just generally better and in production and the OFFICAL ONE PLEASE ATLEAST CREDIT ME IF YOU PLAN TO edit it for yourself or else il have to add an license
-    You can see the creation of things are similar to rayfield which is intended because its easy and most developers use it, espacially small ones.
-    Also it take significantly longer because i decided to make it pretty readable and lots of error handling and stuff.
-    KNOWN BUGS AS OFF 26th november 2025 : 1.when changing themes previous selected theme button stays highlighted but atleast in the current theme always so should be a quick fix
-    2.Things getting cut off a little from the sides
-    Suggestions by some people : "better tab switching animation" yeah idk really, "lucide icon soppurt for tabs" yeah im gonna idk when, "Gradient to the glassy background configurable in themes" yeah thats kinda needed?
-    "More configurable settings for blurring" yeah ive been kinda annyoed having blur when gui is minimized so yeah pretty soon "KEYBIND FIX" dude idk keybinds been to annoying tho
-    "Make Notifications better with animations when dissapearing and better design" offensive just offensive
+	This is just generally better and in production and the OFFICAL ONE PLEASE ATLEAST CREDIT ME IF YOU PLAN TO edit it for yourself or else il have to add an license
+	You can see the creation of things are similar to rayfield which is intended because its easy and most developers use it, espacially small ones.
+	Also it take significantly longer because i decided to make it pretty readable and lots of error handling and stuff.
+	KNOWN BUGS AS OFF 26th november 2025 : 1.when changing themes previous selected theme button stays highlighted but atleast in the current theme always so should be a quick fix
+	2.Things getting cut off a little from the sides
+	Suggestions by some people : "better tab switching animation" yeah idk really, "lucide icon soppurt for tabs" yeah im gonna idk when, "Gradient to the glassy background configurable in themes" yeah thats kinda needed?
+	"More configurable settings for blurring" yeah ive been kinda annyoed having blur when gui is minimized so yeah pretty soon "KEYBIND FIX" dude idk keybinds been to annoying tho
+	"Make Notifications better with animations when dissapearing and better design" offensive just offensive
 ]]
 
 
@@ -358,9 +358,8 @@ function AlexchadLibrary:CreateWindow(options)
         Elements = {},
         ConfigData = {},
         Connections = {},
-        ElementRefs = {},
-        AutoSaveEnabled = configEnabled, -- INTEGRATED: Dynamic Auto Save State
-        ForceSaveNext = false -- INTEGRATED: Force save flag
+        ElementRefs = {}, -- Store references for theme updates
+        AutoSaveEnabled = configEnabled
     }
     
     -- Load saved config
@@ -372,10 +371,6 @@ function AlexchadLibrary:CreateWindow(options)
             if savedData.Theme and Themes[savedData.Theme] then
                 Window.Theme = Themes[savedData.Theme]
                 Window.ThemeName = savedData.Theme
-            end
-            -- INTEGRATED: Load AutoSave toggle state
-            if savedData.AutoSave ~= nil then
-                Window.AutoSaveEnabled = savedData.AutoSave
             end
         end
     end
@@ -691,14 +686,10 @@ function AlexchadLibrary:CreateWindow(options)
         Utility:Create("UIStroke", { Color = theme.Border, Transparency = theme.BorderTransparency + 0.2, Thickness = 1 })
     })
     
-    -- INTEGRATED: Save Config Logic with AutoSave Toggle Support
+    -- Save Config
     local function SaveConfig()
-        if not configEnabled then return end
-        if not Window.AutoSaveEnabled and not Window.ForceSaveNext then return end
-        
-        Window.ForceSaveNext = false -- Reset force save
-        
-        local data = { Theme = Window.ThemeName, AutoSave = Window.AutoSaveEnabled, Elements = {} }
+        if not Window.AutoSaveEnabled then return end
+        local data = { Theme = Window.ThemeName, Elements = {} }
         for id, el in pairs(Window.Elements) do
             if el.Value ~= nil then data.Elements[id] = el.Value end
         end
@@ -797,26 +788,26 @@ function AlexchadLibrary:CreateWindow(options)
                 if frameStroke then Utility:Tween(frameStroke, {Color = newTheme.Border}, dur) end
                 -- Update options
                 for _, opt in pairs(ref.OptionsContainer:GetChildren()) do
-                    if opt:IsA("TextButton") then
-                        local dropdownValue = ref.Element.Value
-                        local isSelected = false
-                        
-                        -- Check if this option is selected
-                        if type(dropdownValue) == "table" then
-                            -- Multi-select dropdown
-                            isSelected = table.find(dropdownValue, opt.Name) ~= nil
-                        else
-                            -- Single-select dropdown
-                            isSelected = dropdownValue == opt.Name
-                        end
-                        
-                        Utility:Tween(opt, {
-                            BackgroundColor3 = isSelected and newTheme.Accent or newTheme.Container,
-                            BackgroundTransparency = isSelected and 0 or newTheme.ContainerTransparency,
-                            TextColor3 = isSelected and newTheme.Text or newTheme.TextDark
-                        }, dur)
-                    end
-                end
+				    if opt:IsA("TextButton") then
+				        local dropdownValue = ref.Element.Value
+				        local isSelected = false
+				        
+				        -- Check if this option is selected
+				        if type(dropdownValue) == "table" then
+				            -- Multi-select dropdown
+				            isSelected = table.find(dropdownValue, opt.Name) ~= nil
+				        else
+				            -- Single-select dropdown
+				            isSelected = dropdownValue == opt.Name
+				        end
+				        
+				        Utility:Tween(opt, {
+				            BackgroundColor3 = isSelected and newTheme.Accent or newTheme.Container,
+				            BackgroundTransparency = isSelected and 0 or newTheme.ContainerTransparency,
+				            TextColor3 = isSelected and newTheme.Text or newTheme.TextDark
+				        }, dur)
+				    end
+				end
                 
             elseif ref.Type == "Input" then
                 Utility:Tween(ref.Frame, {BackgroundColor3 = newTheme.Element, BackgroundTransparency = newTheme.ElementTransparency}, dur)
@@ -1152,29 +1143,29 @@ function AlexchadLibrary:CreateWindow(options)
         })
         
         local TabContent = Utility:Create("ScrollingFrame", {
-            Name = tabName .. "Content",
-            Parent = MainContent,
-            BackgroundTransparency = 1,
-            Position = UDim2.new(0, 18, 0, 15),
-            Size = UDim2.new(1, -36, 1, -30),  -- More horizontal padding
-            ScrollBarThickness = 4,
-            ScrollBarImageColor3 = theme.Accent,
-            ScrollBarImageTransparency = 0.3,
-            CanvasSize = UDim2.new(0, 0, 0, 0),
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
-            Visible = false,
-            ClipsDescendants = true
-        }, {
-            Utility:Create("UIListLayout", { 
-                SortOrder = Enum.SortOrder.LayoutOrder, 
-                Padding = UDim.new(0, 10) 
-            }),
-            -- ADD this padding to prevent content touching edges
-            Utility:Create("UIPadding", {
-                PaddingLeft = UDim.new(0, 2),
-                PaddingRight = UDim.new(0, 6)  -- Extra for scrollbar
-            })
-        })
+		    Name = tabName .. "Content",
+		    Parent = MainContent,
+		    BackgroundTransparency = 1,
+		    Position = UDim2.new(0, 18, 0, 15),
+		    Size = UDim2.new(1, -36, 1, -30),  -- More horizontal padding
+		    ScrollBarThickness = 4,
+		    ScrollBarImageColor3 = theme.Accent,
+		    ScrollBarImageTransparency = 0.3,
+		    CanvasSize = UDim2.new(0, 0, 0, 0),
+		    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		    Visible = false,
+		    ClipsDescendants = true
+		}, {
+		    Utility:Create("UIListLayout", { 
+		        SortOrder = Enum.SortOrder.LayoutOrder, 
+		        Padding = UDim.new(0, 10) 
+		    }),
+		    -- ADD this padding to prevent content touching edges
+		    Utility:Create("UIPadding", {
+		        PaddingLeft = UDim.new(0, 2),
+		        PaddingRight = UDim.new(0, 6)  -- Extra for scrollbar
+		    })
+		})
         
         Tab.Button = TabButton
         Tab.Content = TabContent
@@ -1478,15 +1469,15 @@ function AlexchadLibrary:CreateWindow(options)
                     Toggle.Value = not Toggle.Value
                     Update(true)
                     Utility:Ripple(ClickArea, theme, Config)
-                    callback(Toggle.Value) -- INTEGRATED: Callback before save
                     SaveConfig()
+                    callback(Toggle.Value)
                 end)
                 
                 function Toggle:Set(v, skip)
                     Toggle.Value = v
                     Update(true)
-                    if not skip then callback(v) end
                     SaveConfig()
+                    if not skip then callback(v) end
                 end
                 
                 if default then callback(default) end
@@ -1615,8 +1606,8 @@ function AlexchadLibrary:CreateWindow(options)
                     Utility:Tween(Fill, {Size = UDim2.new(fillPos, 0, 1, 0)}, dur)
                     Utility:Tween(Knob, {Position = UDim2.new(fillPos, 0, 0.5, 0)}, dur)
                     
-                    callback(value) -- INTEGRATED
                     SaveConfig()
+                    callback(value)
                 end
                 
                 Input.MouseButton1Down:Connect(function()
@@ -1651,8 +1642,8 @@ function AlexchadLibrary:CreateWindow(options)
                     ValueLabel.Text = tostring(v) .. suffix
                     Fill.Size = UDim2.new(fillPos, 0, 1, 0)
                     Knob.Position = UDim2.new(fillPos, 0, 0.5, 0)
-                    if not skip then callback(v) end
                     SaveConfig()
+                    if not skip then callback(v) end
                 end
                 
                 callback(default)
@@ -1712,7 +1703,8 @@ function AlexchadLibrary:CreateWindow(options)
                     TextColor3 = theme.Text,
                     TextSize = 14,
                     TextXAlignment = Enum.TextXAlignment.Left
-                 })
+                })
+                
                 local function GetDisplayText()
                     if multiSelect then
                         if #Dropdown.Value == 0 then return "None"

@@ -278,43 +278,6 @@ function Utility:MakeDraggable(frame, handle, config)
     end)
 end
 
--- Configuration Manager
-local ConfigManager = {}
-
-function ConfigManager:GetSaveFolder(folderName)
-    local success, result = pcall(function()
-        if isfolder and writefile and readfile then
-            if not isfolder(folderName) then
-                makefolder(folderName)
-            end
-            return true
-        end
-        return false
-    end)
-    return success and result
-end
-
-function ConfigManager:Save(folderName, fileName, data)
-    pcall(function()
-        if writefile then
-            writefile(folderName .. "/" .. fileName .. ".json", HttpService:JSONEncode(data))
-        end
-    end)
-end
-
-function ConfigManager:Load(folderName, fileName)
-    local success, result = pcall(function()
-        if readfile and isfile then
-            local path = folderName .. "/" .. fileName .. ".json"
-            if isfile(path) then
-                return HttpService:JSONDecode(readfile(path))
-            end
-        end
-        return nil
-    end)
-    return success and result or nil
-end
-
 -- Main Library
 function AlexchadLibrary:CreateWindow(options)
     options = options or {}
@@ -2035,7 +1998,7 @@ function AlexchadLibrary:CreateWindow(options)
                     Value = default ~= "None" and Enum.KeyCode[default] or nil,
                     Listening = false
                 }
-                Window.Elements[id] = { Value = default }
+                Window.Elements[id] = Keybind
                 
                 local Frame = Utility:Create("Frame", {
                     Name = name .. "Keybind",
@@ -2179,7 +2142,7 @@ function AlexchadLibrary:CreateWindow(options)
                 end
                 
                 local ColorPicker = { Value = default, Open = false }
-                Window.Elements[id] = { Value = {math.floor(default.R * 255), math.floor(default.G * 255), math.floor(default.B * 255)} }
+                Window.Elements[id] = ColorPicker
                 
                 local h, s, v = default:ToHSV()
                 
@@ -2724,3 +2687,308 @@ function AlexchadLibrary:IsMobile()
 end
 
 return AlexchadLibrary
+
+-- SaveManager System for AlexchadLibrary
+local SaveManager = {} do
+    SaveManager.Folder = "AlexchadSettings"
+    SaveManager.Ignore = {}
+    SaveManager.Window = nil
+
+    SaveManager.Parser = {
+        Toggle = {
+            Save = function(idx, object) 
+                return { type = "Toggle", idx = idx, value = object.Value } 
+            end,
+            Load = function(idx, data)
+                if SaveManager.Window.Elements[idx] then 
+                    SaveManager.Window.Elements[idx]:Set(data.value, true)
+                end
+            end,
+        },
+        Slider = {
+            Save = function(idx, object)
+                return { type = "Slider", idx = idx, value = object.Value }
+            end,
+            Load = function(idx, data)
+                if SaveManager.Window.Elements[idx] then 
+                    SaveManager.Window.Elements[idx]:Set(data.value, true)
+                end
+            end,
+        },
+        Dropdown = {
+            Save = function(idx, object)
+                return { type = "Dropdown", idx = idx, value = object.Value }
+            end,
+            Load = function(idx, data)
+                if SaveManager.Window.Elements[idx] then 
+                    SaveManager.Window.Elements[idx]:Set(data.value, true)
+                end
+            end,
+        },
+        Input = {
+            Save = function(idx, object)
+                return { type = "Input", idx = idx, value = object.Value }
+            end,
+            Load = function(idx, data)
+                if SaveManager.Window.Elements[idx] and type(data.value) == "string" then
+                    SaveManager.Window.Elements[idx]:Set(data.value, true)
+                end
+            end,
+        },
+        Keybind = {
+            Save = function(idx, object)
+                -- Keybind value di Alexchad berupa string "E", "None", dll
+                return { type = "Keybind", idx = idx, value = object.Value }
+            end,
+            Load = function(idx, data)
+                if SaveManager.Window.Elements[idx] then 
+                    SaveManager.Window.Elements[idx]:Set(data.value, true)
+                end
+            end,
+        },
+        ColorPicker = {
+            Save = function(idx, object)
+                -- ColorPicker value di Alexchad berupa Color3
+                local c = object.Value
+                if typeof(c) == "Color3" then
+                    return { type = "ColorPicker", idx = idx, value = {math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255)} }
+                end
+                return nil
+            end,
+            Load = function(idx, data)
+                if SaveManager.Window.Elements[idx] and data.value then
+                    local c = data.value
+                    SaveManager.Window.Elements[idx]:Set(Color3.fromRGB(c[1], c[2], c[3]), true)
+                end
+            end,
+        }
+    }
+
+    function SaveManager:SetIgnoreIndexes(list)
+        for _, key in next, list do
+            self.Ignore[key] = true
+        end
+    end
+
+    function SaveManager:SetFolder(folder)
+        self.Folder = folder
+        self:BuildFolderTree()
+    end
+
+    function SaveManager:Save(name)
+        if not name then return false, "no config file is selected" end
+
+        local fullPath = self.Folder .. "/settings/" .. name .. ".json"
+        local data = { objects = {} }
+
+        for idx, option in next, self.Window.Elements do
+            if not option then continue end
+            -- Deteksi tipe elemen berdasarkan fungsi yang ada di dalam objek
+            local elemType = nil
+            if option.Set and option.Value ~= nil then
+                if typeof(option.Value) == "boolean" then elemType = "Toggle"
+                elseif typeof(option.Value) == "number" then elemType = "Slider"
+                elseif typeof(option.Value) == "string" then 
+                    elemType = option.Listening and "Keybind" or "Input"
+                elseif typeof(option.Value) == "Color3" then elemType = "ColorPicker"
+                elseif typeof(option.Value) == "table" then elemType = "Dropdown"
+                end
+            end
+
+            if not elemType or not self.Parser[elemType] then continue end
+            if self.Ignore[idx] then continue end
+
+            local savedData = self.Parser[elemType].Save(idx, option)
+            if savedData then
+                table.insert(data.objects, savedData)
+            end
+        end	
+
+        local success, encoded = pcall(HttpService.JSONEncode, HttpService, data)
+        if not success then return false, "failed to encode data" end
+
+        writefile(fullPath, encoded)
+        return true
+    end
+
+    function SaveManager:Load(name)
+        if not name then return false, "no config file is selected" end
+        
+        local file = self.Folder .. "/settings/" .. name .. ".json"
+        if not isfile(file) then return false, "invalid file" end
+
+        local success, decoded = pcall(HttpService.JSONDecode, HttpService, readfile(file))
+        if not success then return false, "decode error" end
+
+        for _, option in next, decoded.objects do
+            if self.Parser[option.type] then
+                task.spawn(function() self.Parser[option.type].Load(option.idx, option) end)
+            end
+        end
+
+        return true
+    end
+
+    function SaveManager:Delete(name)
+        if not name then return false, "no config file is selected" end
+        local file = self.Folder .. "/settings/" .. name .. ".json"
+        if isfile(file) then
+            delfile(file)
+            return true
+        end
+        return false, "file not found"
+    end
+
+    function SaveManager:BuildFolderTree()
+        local paths = {
+            self.Folder,
+            self.Folder .. "/settings"
+        }
+        for i = 1, #paths do
+            local str = paths[i]
+            if not isfolder(str) then
+                makefolder(str)
+            end
+        end
+    end
+
+    function SaveManager:RefreshConfigList()
+        local list = listfiles(self.Folder .. "/settings")
+        local out = {}
+        for i = 1, #list do
+            local file = list[i]
+            if file:sub(-5) == ".json" then
+                local pos = file:find(".json", 1, true)
+                local start = pos
+
+                local char = file:sub(pos, pos)
+                while char ~= "/" and char ~= "\\" and char ~= "" do
+                    pos = pos - 1
+                    char = file:sub(pos, pos)
+                end
+
+                if char == "/" or char == "\\" then
+                    local name = file:sub(pos + 1, start - 1)
+                    if name ~= "options" then
+                        table.insert(out, name)
+                    end
+                end
+            end
+        end
+        return out
+    end
+
+    function SaveManager:SetWindow(window)
+        self.Window = window
+    end
+
+    function SaveManager:LoadAutoloadConfig()
+        if isfile(self.Folder .. "/settings/autoload.txt") then
+            local name = readfile(self.Folder .. "/settings/autoload.txt")
+            local success, err = self:Load(name)
+            if not success then
+                return self.Window:Notify({
+                    Title = "Configuration",
+                    Content = "Failed to auto-load config: " .. err,
+                    Duration = 7,
+                    Type = "Error"
+                })
+            end
+
+            self.Window:Notify({
+                Title = "Configuration",
+                Content = string.format("Auto loaded config %q", name),
+                Duration = 5,
+                Type = "Success"
+            })
+        end
+    end
+
+    function SaveManager:BuildConfigSection(section)
+        assert(self.Window, "Must call SaveManager:SetWindow(window) first!")
+
+        section:CreateInput({ Name = "Config Name", Flag = "SaveManager_ConfigName", PlaceholderText = "Enter config name..." })
+        section:CreateDropdown({ Name = "Config List", Flag = "SaveManager_ConfigList", Options = self:RefreshConfigList() })
+
+        section:CreateButton({
+            Name = "Create Config",
+            Callback = function()
+                local name = self.Window.Elements["SaveManager_ConfigName"].Value
+                if name:gsub(" ", "") == "" then 
+                    return self.Window:Notify({ Title = "Configuration", Content = "Invalid config name (empty)", Duration = 5, Type = "Warning" })
+                end
+
+                local success, err = self:Save(name)
+                if not success then
+                    return self.Window:Notify({ Title = "Configuration", Content = "Failed to save: " .. err, Duration = 5, Type = "Error" })
+                end
+
+                self.Window:Notify({ Title = "Configuration", Content = string.format("Created config %q", name), Duration = 5, Type = "Success" })
+
+                -- Refresh Dropdown
+                self.Window.Elements["SaveManager_ConfigList"]:Refresh(self:RefreshConfigList(), false)
+            end
+        })
+
+        section:CreateButton({
+            Name = "Load Config",
+            Callback = function()
+                local name = self.Window.Elements["SaveManager_ConfigList"].Value
+                if not name or name == "" then return end
+
+                local success, err = self:Load(name)
+                if not success then
+                    return self.Window:Notify({ Title = "Configuration", Content = "Failed to load: " .. err, Duration = 5, Type = "Error" })
+                end
+
+                self.Window:Notify({ Title = "Configuration", Content = string.format("Loaded config %q", name), Duration = 5, Type = "Success" })
+            end
+        })
+
+        section:CreateButton({
+            Name = "Overwrite Config",
+            Callback = function()
+                local name = self.Window.Elements["SaveManager_ConfigList"].Value
+                if not name or name == "" then return end
+
+                local success, err = self:Save(name)
+                if not success then
+                    return self.Window:Notify({ Title = "Configuration", Content = "Failed to overwrite: " .. err, Duration = 5, Type = "Error" })
+                end
+
+                self.Window:Notify({ Title = "Configuration", Content = string.format("Overwrote config %q", name), Duration = 5, Type = "Success" })
+            end
+        })
+
+        section:CreateButton({
+            Name = "Delete Config",
+            Callback = function()
+                local name = self.Window.Elements["SaveManager_ConfigList"].Value
+                if not name or name == "" then return end
+
+                self:Delete(name)
+                self.Window:Notify({ Title = "Configuration", Content = string.format("Deleted config %q", name), Duration = 5, Type = "Info" })
+
+                self.Window.Elements["SaveManager_ConfigList"]:Refresh(self:RefreshConfigList(), false)
+            end
+        })
+
+        local AutoloadButton = section:CreateButton({
+            Name = "Set as Autoload",
+            Callback = function()
+                local name = self.Window.Elements["SaveManager_ConfigList"].Value
+                if not name or name == "" then return end
+
+                writefile(self.Folder .. "/settings/autoload.txt", name)
+                self.Window:Notify({ Title = "Configuration", Content = string.format("Set %q to auto load", name), Duration = 5, Type = "Success" })
+            end
+        })
+
+        -- Agar tidak ikut tersave ke dalam config
+        self:SetIgnoreIndexes({ "SaveManager_ConfigList", "SaveManager_ConfigName" })
+    end
+
+    SaveManager:BuildFolderTree()
+end
+
+AlexchadLibrary.SaveManager = SaveManager

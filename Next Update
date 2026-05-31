@@ -848,7 +848,118 @@ function AlexchadLibrary:CreateWindow(options)
     end
     
     Window.ApplyTheme = ApplyTheme
+
+-- [TARUH INI DI ATAS SENDIRI, DI LUAR CREATEWINDOW AGAR TIDAK LIMIT LOCAL REGISTER]
+local function CreateNotifInternal(ScreenGui, theme, Config, Window, notifyOptions)
+    notifyOptions = notifyOptions or {}
+    local title = notifyOptions.Title or "Notification"
+    local content = notifyOptions.Content or ""
+    local duration = notifyOptions.Duration or 5
+    local notifyType = notifyOptions.Type or "Info"
+    local showButtons = notifyOptions.Buttons ~= false
     
+    local typeColors = { Info = theme.Accent, Success = theme.Success, Warning = theme.Warning, Error = theme.Error }
+    local typeColor = typeColors[notifyType] or theme.Accent
+    
+    local NotifHolder = ScreenGui:FindFirstChild("NotificationHolder")
+    if not NotifHolder then
+        NotifHolder = Utility:Create("Frame", {
+            Name = "NotificationHolder", Parent = ScreenGui, BackgroundTransparency = 1,
+            Position = UDim2.new(1, -20, 1, -20), Size = UDim2.new(0, 340, 1, -40), AnchorPoint = Vector2.new(1, 1)
+        }, {
+            Utility:Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom, Padding = UDim.new(0, 12) })
+        })
+    end
+    
+    local NotifFrame = Utility:Create("Frame", {
+        Name = "Notification", Parent = NotifHolder, BackgroundColor3 = theme.Background,
+        BackgroundTransparency = theme.BackgroundTransparency - 0.05, Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.new(1, 50, 0, 0), ClipsDescendants = true
+    }, {
+        Utility:Create("UICorner", { CornerRadius = UDim.new(0, Config.CornerRadius) }),
+        Utility:Create("UIStroke", { Color = typeColor, Transparency = 0.3, Thickness = 1.5 })
+    })
+    
+    local ContentContainer = Utility:Create("Frame", {
+        Name = "ContentContainer", Parent = NotifFrame, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 16, 0, 0), Size = UDim2.new(1, -20, 0, 0), AutomaticSize = Enum.AutomaticSize.Y
+    }, {
+        Utility:Create("UIPadding", { PaddingTop = UDim.new(0, 14), PaddingBottom = UDim.new(0, 14), PaddingRight = UDim.new(0, 10) }),
+        Utility:Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8) })
+    })
+    
+    local HeaderFrame = Utility:Create("Frame", { Name = "Header", Parent = ContentContainer, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 24) })
+    Utility:Create("TextLabel", { Name = "Icon", Parent = HeaderFrame, BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(0, 24, 0, 24), Font = Enum.Font.GothamBold, Text = notifyType == "Success" and "✓" or notifyType == "Warning" and "!" or notifyType == "Error" and "✗" or "i", TextColor3 = typeColor, TextSize = 16 })
+    Utility:Create("TextLabel", { Name = "Title", Parent = HeaderFrame, BackgroundTransparency = 1, Position = UDim2.new(0, 30, 0, 0), Size = UDim2.new(1, -70, 1, 0), Font = Enum.Font.GothamBold, Text = title, TextColor3 = theme.Text, TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+    
+    local CloseBtn = Utility:Create("TextButton", { Name = "Close", Parent = HeaderFrame, BackgroundColor3 = theme.Element, BackgroundTransparency = 0.5, Position = UDim2.new(1, -24, 0, 0), Size = UDim2.new(0, 24, 0, 24), Font = Enum.Font.GothamBold, Text = "X", TextColor3 = theme.TextDark, TextSize = 12, AutoButtonColor = false }, { Utility:Create("UICorner", { CornerRadius = UDim.new(0, 6) }) })
+    
+    Utility:Create("TextLabel", { Name = "Content", Parent = ContentContainer, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Font = Enum.Font.Gotham, Text = content, TextColor3 = theme.TextDark, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true })
+    
+    local ProgressContainer = Utility:Create("Frame", { Name = "ProgressContainer", Parent = ContentContainer, BackgroundColor3 = theme.Element, BackgroundTransparency = 0.5, Size = UDim2.new(1, 0, 0, 4) }, { Utility:Create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+    local ProgressFill = Utility:Create("Frame", { Name = "Fill", Parent = ProgressContainer, BackgroundColor3 = typeColor, Size = UDim2.new(1, 0, 1, 0) }, { Utility:Create("UICorner", { CornerRadius = UDim.new(1, 0) }) })
+    
+    Utility:Tween(NotifFrame, {Position = UDim2.new(0, 0, 0, 0)}, Config.AnimationSpeed, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    Utility:Tween(ProgressFill, {Size = UDim2.new(0, 0, 1, 0)}, duration, Enum.EasingStyle.Linear)
+    
+    local function CloseNotification()
+        Utility:Tween(NotifFrame, {Position = UDim2.new(1, 50, 0, 0)}, Config.AnimationSpeed)
+        task.wait(Config.AnimationSpeed + 0.1)
+        if NotifFrame then NotifFrame:Destroy() end
+    end
+    
+    CloseBtn.MouseButton1Click:Connect(CloseNotification)
+    task.delay(duration, function()
+        if NotifFrame and NotifFrame.Parent then CloseNotification() end
+    end)
+end
+
+local function CreateDialogInternal(ScreenGui, theme, Config, Window, Blur, MainContainer, CleanupAllBlur, opts)
+    opts = opts or {}
+    local title = opts.Title or "Dialog"
+    local content = opts.Content or ""
+    local buttons = opts.Buttons or {}
+    
+    local DialogBg = Utility:Create("Frame", { Name = "DialogBackground", Parent = ScreenGui, BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), ZIndex = 100 })
+    local DialogFrame = Utility:Create("Frame", { Name = "Dialog", Parent = DialogBg, BackgroundColor3 = theme.Background, BackgroundTransparency = theme.BackgroundTransparency, Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 0, 0, 0), AnchorPoint = Vector2.new(0.5, 0.5), ZIndex = 101, ClipsDescendants = true }, {
+        Utility:Create("UICorner", { CornerRadius = UDim.new(0, Config.CornerRadius + 4) }),
+        Utility:Create("UIStroke", { Color = theme.Border, Transparency = theme.BorderTransparency, Thickness = 1.5 })
+    })
+    
+    Utility:Create("TextLabel", { Parent = DialogFrame, BackgroundTransparency = 1, Position = UDim2.new(0, 25, 0, 20), Size = UDim2.new(1, -50, 0, 25), Font = Enum.Font.GothamBold, Text = title, TextColor3 = theme.Text, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 102 })
+    Utility:Create("TextLabel", { Parent = DialogFrame, BackgroundTransparency = 1, Position = UDim2.new(0, 25, 0, 50), Size = UDim2.new(1, -50, 0, 60), Font = Enum.Font.Gotham, Text = content, TextColor3 = theme.TextDark, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextWrapped = true, ZIndex = 102 })
+    
+    local ButtonContainer = Utility:Create("Frame", { Parent = DialogFrame, BackgroundTransparency = 1, Position = UDim2.new(0, 25, 1, -60), Size = UDim2.new(1, -50, 0, 38), ZIndex = 102 }, {
+        Utility:Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 12) })
+    })
+    
+    Utility:Tween(DialogBg, {BackgroundTransparency = 0.5}, Config.AnimationSpeed)
+    Utility:Tween(DialogFrame, {Size = UDim2.new(0, 380, 0, 180)}, Config.AnimationSpeed, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    if Blur then Utility:Tween(Blur, {Size = 15}, Config.AnimationSpeed) end
+    
+    local function CloseDialog()
+        Utility:Tween(DialogBg, {BackgroundTransparency = 1}, Config.AnimationSpeed)
+        Utility:Tween(DialogFrame, {Size = UDim2.new(0, 0, 0, 0)}, Config.AnimationSpeed, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+        if Blur then Utility:Tween(Blur, {Size = 10}, Config.AnimationSpeed) end
+        task.wait(Config.AnimationSpeed + 0.1)
+        DialogBg:Destroy()
+    end
+    
+    for _, btnInfo in pairs(buttons) do
+        local btnText = btnInfo.Title or "Button"
+        local btnCallback = btnInfo.Callback or function() end
+        local isPrimary = btnInfo.Primary or false
+        
+        local DialogBtn = Utility:Create("TextButton", { Parent = ButtonContainer, BackgroundColor3 = isPrimary and theme.Accent or theme.Element, BackgroundTransparency = isPrimary and 0 or theme.ElementTransparency, Size = UDim2.new(0, 90, 0, 36), Font = Enum.Font.GothamBold, Text = btnText, TextColor3 = isPrimary and theme.Text or theme.TextDark, TextSize = 13, AutoButtonColor = false, ZIndex = 103 }, { Utility:Create("UICorner", { CornerRadius = UDim.new(0, Config.ElementCornerRadius) }) })
+        
+        DialogBtn.MouseButton1Click:Connect(function()
+            Utility:Ripple(DialogBtn, theme, Config)
+            btnCallback()
+            CloseDialog()
+        end)
+    end
+end
+
     -- Notification System (IMPROVED) - PECAH MENJADI SUB-FUNGSI AGAR TIDAK OUT OF REGISTERS
     local function CreateNotifInternal(notifyOptions)
         notifyOptions = notifyOptions or {}
